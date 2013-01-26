@@ -52,7 +52,8 @@ class SessionSecurityMiddleware(object):
 
         now = datetime.datetime.now()
         expire_after = request.agency.caregiver_auto_logout_time * 60
-        delta = now - data['last_activity']
+        if expire_after == 0:
+            return
 
         data = request.session.get('session_security', {
             'LOGOUT_URL': LOGOUT_URL,
@@ -62,8 +63,7 @@ class SessionSecurityMiddleware(object):
             'last_activity': now,
         })
 
-        if expire_after == 0:
-            return
+        delta = now - data['last_activity']
 
         if delta.seconds > expire_after and request.path_info != LOGIN_URL:
             logger.info('Logged %s out after %s' % (request.user, delta))
