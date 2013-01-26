@@ -1,9 +1,13 @@
 import datetime
+import logging
 
 from django import http
 from django.contrib.auth import logout
 
 from settings import *
+
+logger = logging.getLogger(__name__)
+
 
 
 class SessionSecurityMiddleware(object):
@@ -13,7 +17,7 @@ class SessionSecurityMiddleware(object):
     To install this middleware, add to your ``settings.MIDDLEWARE_CLASSES``::
 
         'session_security.middleware.SessionSecurityMiddleware'
-        
+
     Make sure that it is placed **after** authentication middlewares.
     """
 
@@ -34,25 +38,35 @@ class SessionSecurityMiddleware(object):
         - Otherwise: update
           ``request.session['session_security']['last_activity']`` to now.
         """
-
         if not request.user.is_authenticated():
+            return
+
+        if request.profile is None:
+            return
+
+        if request.profile.caregiver is None:
             return
 
         if request.path in PASSIVE_URLS:
             return
 
         now = datetime.datetime.now()
+        expire_after = request.agency.caregiver_auto_logout_time * 60
+        delta = now - data['last_activity']
 
         data = request.session.get('session_security', {
             'LOGOUT_URL': LOGOUT_URL,
             'LOGIN_URL': LOGIN_URL,
-            'EXPIRE_AFTER': EXPIRE_AFTER,
+            'EXPIRE_AFTER': expire_after,
             'WARN_AFTER': WARN_AFTER,
             'last_activity': now,
         })
 
-        delta = now - data['last_activity']
-        if delta.seconds > EXPIRE_AFTER and request.path_info != LOGIN_URL:
+        if expire_after == 0:
+            return
+
+        if delta.seconds > expire_after and request.path_info != LOGIN_URL:
+            logger.info('Logged %s out after %s' % (request.user, delta))
             logout(request)
             return http.HttpResponseRedirect(
                 '%s?next=%s' % (LOGIN_URL, request.path_info))
